@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>WIP Tracker — Shop Floor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3350;
+    --accent: #f59e0b;
+    --accent2: #3b82f6;
+    --danger: #ef4444;
+    --success: #22c55e;
+    --hold: #a855f7;
+    --text: #f1f5f9;
+    --muted: #64748b;
+    --radius: 14px;
+    --font: 'Inter', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    min-height: 100dvh;
+    padding-bottom: 110px;
+  }
+
+  /* ─── Header ─── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .logo-mark {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 900; font-size: 15px; color: #000; flex-shrink: 0;
+  }
+  header h1 { font-size: 17px; font-weight: 700; letter-spacing: -.3px; }
+  header p  { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .header-right { margin-left: auto; display: flex; gap: 8px; }
+
+  /* ─── Tabs ─── */
+  .tab-bar {
+    display: flex;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab {
+    flex: 1; min-width: 70px;
+    padding: 12px 8px 10px;
+    font-size: 11px; font-weight: 600;
+    text-align: center; cursor: pointer;
+    color: var(--muted);
+    border-bottom: 3px solid transparent;
+    white-space: nowrap;
+    transition: all .2s;
+    background: none; border-top: none; border-left: none; border-right: none;
+    letter-spacing: .2px;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab.hold-tab.active { color: var(--hold); border-bottom-color: var(--hold); }
+  .tab-count {
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 20px; font-size: 10px; font-weight: 800;
+    min-width: 17px; height: 17px; padding: 0 4px;
+    margin-left: 4px;
+    background: var(--border); color: var(--muted);
+  }
+  .tab.active .tab-count { background: var(--accent); color: #000; }
+  .tab.hold-tab.active .tab-count { background: var(--hold); color: #fff; }
+
+  /* ─── Content ─── */
+  .content { padding: 16px; max-width: 600px; margin: 0 auto; }
+
+  /* ─── Scan Panel ─── */
+  .scan-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .panel-label {
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    letter-spacing: .8px; text-transform: uppercase;
+    margin-bottom: 10px; display: block;
+  }
+
+  .station-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .station-btn {
+    padding: 11px 8px;
+    border-radius: 10px;
+    border: 2px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 11px; font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all .2s;
+    line-height: 1.3;
+  }
+  .station-btn .s-icon { font-size: 18px; display: block; margin-bottom: 3px; }
+  .station-btn.selected { border-color: var(--accent); background: rgba(245,158,11,.12); color: var(--accent); }
+  .station-btn.hold-btn.selected { border-color: var(--hold); background: rgba(168,85,247,.12); color: var(--hold); }
+
+  /* ─── Photo Preview ─── */
+  #photo-preview-wrap {
+    display: none;
+    margin-bottom: 12px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  #photo-preview { width: 100%; display: block; max-height: 200px; object-fit: contain; background:#000; }
+  #ocr-status {
+    padding: 10px 12px;
+    background: var(--surface2);
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  /* ─── Confirm FAB Panel ─── */
+  #confirm-panel {
+    display: none;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  #confirm-panel .cp-label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; display: block; }
+  .cp-fab-row { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }
+  .cp-fab-display {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 16px; font-weight: 800; color: var(--accent);
+    letter-spacing: 1px;
+  }
+  #remarks-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    padding: 10px 12px;
+    outline: none;
+    resize: none;
+    font-family: var(--font);
+    margin-bottom: 10px;
+  }
+  #remarks-input:focus { border-color: var(--accent2); }
+  #remarks-input::placeholder { color: var(--muted); }
+
+  /* ─── Inputs ─── */
+  .manual-input-row { display: flex; gap: 8px; }
+  .manual-input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 14px;
+    padding: 11px 14px;
+    outline: none;
+    font-family: var(--font);
+    text-transform: uppercase;
+  }
+  .manual-input:focus { border-color: var(--accent2); }
+  .manual-input::placeholder { color: var(--muted); font-size: 12px; text-transform: none; }
+
+  /* ─── Buttons ─── */
+  .btn {
+    padding: 11px 18px;
+    border-radius: 10px;
+    border: none;
+    font-size: 13px; font-weight: 700;
+    cursor: pointer;
+    transition: all .18s;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    white-space: nowrap;
+    font-family: var(--font);
+  }
+  .btn:active { transform: scale(.97); opacity: .88; }
+  .btn-amber  { background: var(--accent); color: #000; }
+  .btn-blue   { background: var(--accent2); color: #fff; }
+  .btn-ghost  { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-danger { background: rgba(239,68,68,.15); color: var(--danger); border: 1px solid rgba(239,68,68,.3); }
+  .btn-success{ background: rgba(34,197,94,.15); color: var(--success); border: 1px solid rgba(34,197,94,.3); }
+  .btn-sm     { padding: 8px 13px; font-size: 12px; border-radius: 8px; }
+  .btn-full   { width: 100%; }
+
+  /* ─── Unit Cards ─── */
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .section-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; }
+
+  .unit-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    animation: slideIn .2s ease;
+  }
+  @keyframes slideIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:none} }
+  .unit-card-top { display: flex; align-items: flex-start; gap: 10px; }
+  .u-icon {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: rgba(245,158,11,.12); border: 1px solid rgba(245,158,11,.25);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; flex-shrink: 0;
+  }
+  .u-icon.hold-icon { background: rgba(168,85,247,.12); border-color: rgba(168,85,247,.3); }
+  .u-body { flex: 1; min-width: 0; }
+  .unit-fab  { font-size: 15px; font-weight: 800; color: var(--text); margin-bottom: 2px; letter-spacing: .5px; }
+  .unit-meta { font-size: 11px; color: var(--muted); line-height: 1.6; }
+  .unit-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; align-items: center; }
+  .badge {
+    font-size: 10px; font-weight: 700;
+    padding: 3px 8px; border-radius: 20px;
+  }
+  .badge-station { background: rgba(59,130,246,.15); color: var(--accent2); border: 1px solid rgba(59,130,246,.25); }
+  .badge-hold    { background: rgba(168,85,247,.15); color: var(--hold);   border: 1px solid rgba(168,85,247,.3);  }
+  .badge-manual  { background: rgba(245,158,11,.12); color: var(--accent); border: 1px solid rgba(245,158,11,.25); }
+  .badge-photo   { background: rgba(34,197,94,.1);   color: var(--success);border: 1px solid rgba(34,197,94,.2);  }
+  .unit-remarks  { font-size: 12px; color: var(--text); margin-top: 6px; padding: 7px 10px; background: var(--surface2); border-radius: 7px; border-left: 3px solid var(--accent); line-height: 1.5; }
+  .unit-remarks.hold-remark { border-left-color: var(--hold); }
+  .u-del {
+    background: none; border: none; color: var(--muted);
+    font-size: 18px; cursor: pointer; padding: 2px 4px;
+    line-height: 1; flex-shrink: 0;
+  }
+  .u-del:active { color: var(--danger); }
+
+  /* ─── All Units tab ─── */
+  .station-group { margin-bottom: 24px; }
+  .station-group-title {
+    font-size: 12px; font-weight: 800; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--accent);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .station-group-title.hold-group { color: var(--hold); }
+  .station-group-title span { color: var(--muted); font-weight: 500; font-size: 11px; }
+
+  /* ─── Summary strip ─── */
+  .summary-strip {
+    display: flex; gap: 8px;
+    overflow-x: auto; scrollbar-width: none;
+    margin-bottom: 16px; padding-bottom: 4px;
+  }
+  .summary-strip::-webkit-scrollbar { display: none; }
+  .sum-chip {
+    flex-shrink: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 14px;
+    text-align: center; min-width: 72px;
+  }
+  .sum-chip .sc-val   { font-size: 20px; font-weight: 900; color: var(--accent); }
+  .sum-chip .sc-label { font-size: 10px; color: var(--muted); margin-top: 1px; letter-spacing: .2px; }
+  .sum-chip.hold-chip .sc-val { color: var(--hold); }
+
+  /* ─── Empty state ─── */
+  .empty { text-align: center; padding: 44px 24px; color: var(--muted); }
+  .empty .e-icon { font-size: 44px; margin-bottom: 12px; }
+  .empty p { font-size: 14px; line-height: 1.7; }
+
+  /* ─── Toast ─── */
+  #toast {
+    position: fixed; bottom: 116px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-size: 13px; font-weight: 600;
+    padding: 10px 20px; border-radius: 50px;
+    opacity: 0; pointer-events: none;
+    transition: all .25s; white-space: nowrap; z-index: 999;
+  }
+  #toast.show    { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.success { border-color: var(--success); color: var(--success); }
+  #toast.error   { border-color: var(--danger);  color: var(--danger);  }
+  #toast.warn    { border-color: var(--accent);  color: var(--accent);  }
+
+  /* ─── Bottom bar ─── */
+  .bottom-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 12px 16px;
+    display: flex; gap: 10px; z-index: 40;
+  }
+  .bottom-bar .btn { flex: 1; }
+
+  /* ─── Modal ─── */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.7);
+    z-index: 200; display: none;
+    align-items: flex-end; justify-content: center;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px 20px 0 0;
+    padding: 24px 20px 36px;
+    width: 100%; max-width: 560px;
+  }
+  .modal h3 { font-size: 17px; font-weight: 800; margin-bottom: 8px; }
+  .modal p  { font-size: 14px; color: var(--muted); margin-bottom: 20px; line-height: 1.6; }
+  .modal-btns { display: flex; gap: 10px; }
+  .modal-btns .btn { flex: 1; }
+
+  .divider { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">W</div>
+  <div>
+    <h1>WIP Tracker</h1>
+    <p id="shift-date">Shop Floor</p>
+  </div>
+  <div class="header-right">
+    <button class="btn btn-ghost btn-sm" onclick="openResetModal()">⟳ Reset</button>
+  </div>
+</header>
+
+<div class="tab-bar" id="tab-bar"></div>
+<div class="content" id="main-content"></div>
+
+<div class="bottom-bar">
+  <button class="btn btn-blue"  onclick="switchTab('scan')">📸 Scan</button>
+  <button class="btn btn-amber" onclick="generateExcel()">📊 Excel</button>
+</div>
+
+<div id="toast"></div>
+
+<!-- Reset Modal -->
+<div class="modal-backdrop" id="reset-modal" onclick="if(event.target===this)closeResetModal()">
+  <div class="modal">
+    <h3>Reset All Data?</h3>
+    <p>This will permanently delete all scanned units across every station. This cannot be undone.</p>
+    <div class="modal-btns">
+      <button class="btn btn-ghost"  onclick="closeResetModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmReset()">🗑 Reset Everything</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════════
+const STATIONS = ['Assembly','Waiting for Testing','Testing','PDI','Hold'];
+const STATION_ICONS = {
+  'Assembly'           : '🔧',
+  'Waiting for Testing': '⏳',
+  'Testing'            : '🧪',
+  'PDI'                : '✅',
+  'Hold'               : '🚫'
+};
+const STORAGE_KEY = 'wip_tracker_v4';
+const MAX_AGE_MS  = 3 * 24 * 60 * 60 * 1000;
+
+// ═══════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════
+let state = {
+  activeStation : STATIONS[0],
+  activeTab     : 'scan',
+  units         : {},    // { fabNo: { fab, station, remarks, entryMethod, date, time, ts } }
+  pendingFab    : '',    // FAB detected from photo, awaiting confirmation
+  pendingMethod : ''     // 'Photo/OCR' or 'Manual'
+};
+
+// ═══════════════════════════════════════════
+//  STORAGE
+// ═══════════════════════════════════════════
+function saveData() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ units: state.units }));
+}
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    const now = Date.now();
+    state.units = {};
+    for (const [k, v] of Object.entries(parsed.units || {})) {
+      if ((now - v.ts) < MAX_AGE_MS) state.units[k] = v;
+    }
+  } catch(e) { state.units = {}; }
+}
+
+// ═══════════════════════════════════════════
+//  ADD / DELETE UNIT
+// ═══════════════════════════════════════════
+function addUnit(fab, remarks, entryMethod) {
+  fab = fab.trim().toUpperCase();
+  if (!fab) return showToast('FAB number is empty', 'error');
+  const now     = new Date();
+  const dateStr = now.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+  const timeStr = now.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  state.units[fab] = { fab, station: state.activeStation, remarks: remarks || '', entryMethod, date: dateStr, time: timeStr, ts: now.getTime() };
+  saveData();
+  showToast(`${fab} added to ${state.activeStation}`, 'success');
+  clearConfirmPanel();
+  render();
+}
+
+function deleteUnit(fab) {
+  delete state.units[fab];
+  saveData();
+  showToast(`${fab} removed`, 'warn');
+  render();
+}
+
+// ═══════════════════════════════════════════
+//  OCR
+// ═══════════════════════════════════════════
+let ocrWorker = null;
+let lastExtractedRaw = '';
+
+async function getOcrWorker() {
+  if (ocrWorker) return ocrWorker;
+  ocrWorker = await Tesseract.createWorker('eng');
+  await ocrWorker.setParameters({
+    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789: .-',
+    tessedit_pageseg_mode: '6'
+  });
+  return ocrWorker;
+}
+
+function handlePhotoCapture(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  const previewWrap = document.getElementById('photo-preview-wrap');
+  const previewImg  = document.getElementById('photo-preview');
+  const statusEl    = document.getElementById('ocr-status');
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    previewImg.src = e.target.result;
+    previewWrap.style.display = 'block';
+    statusEl.textContent = '⏳ Reading nameplate…';
+    statusEl.style.color = 'var(--muted)';
+    clearConfirmPanel();
+    try {
+      const processed = await preprocessImage(e.target.result);
+      const worker    = await getOcrWorker();
+      const { data }  = await worker.recognize(processed);
+      lastExtractedRaw = data.text || '';
+      const fab = extractFabNo(lastExtractedRaw);
+      if (fab) {
+        statusEl.textContent = `✓ Detected: ${fab}`;
+        statusEl.style.color = 'var(--success)';
+        showConfirmPanel(fab, 'Photo/OCR');
+      } else {
+        const preview = lastExtractedRaw.trim().replace(/\s+/g,' ').slice(0,150);
+        statusEl.innerHTML = `⚠️ FAB No not detected automatically.<br><span style="font-size:10px;opacity:.75;">OCR read: "${preview.replace(/</g,'&lt;') || '(nothing readable)'}"</span><br>Enter manually below.`;
+        statusEl.style.color = 'var(--accent)';
+      }
+    } catch(err) {
+      statusEl.textContent = '⚠️ OCR error. Enter FAB manually below.';
+      statusEl.style.color = 'var(--danger)';
+    }
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+function preprocessImage(dataUrl) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const maxDim = 1600;
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        const s = maxDim / Math.max(width, height);
+        width = Math.round(width * s); height = Math.round(height * s);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      const imgData = ctx.getImageData(0, 0, width, height);
+      const px = imgData.data;
+      const contrast = 1.4;
+      for (let i = 0; i < px.length; i += 4) {
+        const gray = 0.299*px[i] + 0.587*px[i+1] + 0.114*px[i+2];
+        const adj  = Math.max(0, Math.min(255, (gray-128)*contrast+128));
+        px[i] = px[i+1] = px[i+2] = adj;
+      }
+      ctx.putImageData(imgData, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+function extractFabNo(rawText) {
+  if (!rawText) return '';
+  const cleaned = rawText.replace(/\s+/g,' ').toUpperCase();
+
+  // Strategy 1: near FAB NO label
+  let m = cleaned.match(/FAB\s*NO\.?\s*[:\-]?\s*([A-Z0-9]{4})\s?([0-9OISBZ]{6})/);
+  if (m) { const c = normalizeFabCode(m[1]+m[2]); if(c) return c; }
+
+  // Strategy 2: clean 4-letter + 6-digit
+  m = cleaned.match(/\b([A-Z]{4})(\d{6})\b/);
+  if (m) return m[1]+m[2];
+
+  // Strategy 3: 4 alnum + 6 digits with normalization
+  m = cleaned.match(/\b([A-Z0-9]{4})(\d{6})\b/);
+  if (m) { const c = normalizeFabCode(m[1]+m[2]); if(c) return c; }
+
+  // Strategy 4: allow space/dash between letter block and digit block
+  m = cleaned.match(/\b([A-Z0-9]{4})[\s\-]+(\d{6})\b/);
+  if (m) { const c = normalizeFabCode(m[1]+m[2]); if(c) return c; }
+
+  // Strategy 5: 10-char tokens
+  const tokens = cleaned.split(' ').filter(t => /^[A-Z0-9]{8,12}$/.test(t));
+  for (const t of tokens) {
+    if (t.length === 10) { const c = normalizeFabCode(t); if(c) return c; }
+  }
+  return '';
+}
+
+function normalizeFabCode(code) {
+  if (!code || code.length !== 10) return '';
+  const d2l = {'0':'O','1':'I','5':'S','8':'B','2':'Z'};
+  const l2d = {'O':'0','I':'1','S':'5','B':'8','Z':'2'};
+  const letters = code.slice(0,4).split('').map(ch => d2l[ch]||ch).join('');
+  const digits  = code.slice(4,10).split('').map(ch => l2d[ch]||ch).join('');
+  if (/^[A-Z]{4}$/.test(letters) && /^\d{6}$/.test(digits)) return letters+digits;
+  return '';
+}
+
+// ═══════════════════════════════════════════
+//  CONFIRM PANEL (show after FAB detected)
+// ═══════════════════════════════════════════
+function showConfirmPanel(fab, method) {
+  state.pendingFab    = fab;
+  state.pendingMethod = method;
+  const panel = document.getElementById('confirm-panel');
+  const fabEl  = document.getElementById('confirmed-fab');
+  const inp    = document.getElementById('remarks-input');
+  if (!panel) return;
+  if (fabEl) fabEl.textContent = fab;
+  if (inp)   inp.value = '';
+  panel.style.display = 'block';
+  if (inp) setTimeout(() => inp.focus(), 100);
+}
+
+function clearConfirmPanel() {
+  state.pendingFab = '';
+  state.pendingMethod = '';
+  const panel = document.getElementById('confirm-panel');
+  if (panel) panel.style.display = 'none';
+}
+
+function confirmAddUnit() {
+  const fab     = (document.getElementById('confirmed-fab') || {}).textContent || state.pendingFab;
+  const remarks = (document.getElementById('remarks-input') || {}).value || '';
+  if (!fab) return showToast('No FAB number to add', 'error');
+  addUnit(fab, remarks.trim(), state.pendingMethod || 'Photo/OCR');
+  const previewWrap = document.getElementById('photo-preview-wrap');
+  if (previewWrap) previewWrap.style.display = 'none';
+}
+
+function submitManual() {
+  const inp  = document.getElementById('manual-fab');
+  const fab  = inp ? inp.value.trim().toUpperCase() : '';
+  if (!fab) return showToast('Enter a FAB number first', 'error');
+  // Validate pattern: 4 letters + 6 digits
+  if (!/^[A-Z]{4}\d{6}$/.test(fab)) {
+    return showToast('Format should be 4 letters + 6 digits (e.g. BZCC372553)', 'warn');
+  }
+  showConfirmPanel(fab, 'Manual');
+  inp.value = '';
+}
+
+// ═══════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════
+function stationUnits(s) { return Object.values(state.units).filter(u => u.station === s); }
+function allUnits()       { return Object.values(state.units); }
+
+function render() {
+  renderTabs();
+  renderContent();
+  document.getElementById('shift-date').textContent =
+    'Shop Floor — ' + new Date().toLocaleDateString('en-GB', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
+}
+
+function renderTabs() {
+  const tabs = [
+    { id:'scan', label:'📸 Scan' },
+    ...STATIONS.map(s => ({ id:s, label: STATION_ICONS[s]+' '+s, count: stationUnits(s).length, isHold: s==='Hold' })),
+    { id:'all', label:'📋 All', count: allUnits().length }
+  ];
+  document.getElementById('tab-bar').innerHTML = tabs.map(t => `
+    <button class="tab ${state.activeTab===t.id?'active':''} ${t.isHold?'hold-tab':''}" onclick="switchTab('${t.id}')">
+      ${t.label}
+      ${(t.count !== undefined && t.count > 0) ? `<span class="tab-count">${t.count}</span>` : ''}
+    </button>
+  `).join('');
+}
+
+function renderContent() {
+  const el = document.getElementById('main-content');
+  if      (state.activeTab === 'scan') el.innerHTML = renderScanTab();
+  else if (state.activeTab === 'all')  el.innerHTML = renderAllTab();
+  else                                  el.innerHTML = renderStationTab(state.activeTab);
+}
+
+function renderScanTab() {
+  const units = stationUnits(state.activeStation);
+  const isHold = state.activeStation === 'Hold';
+  return `
+    <div class="scan-panel">
+      <span class="panel-label">1. Select Station</span>
+      <div class="station-grid">
+        ${STATIONS.map(s => `
+          <button class="station-btn ${state.activeStation===s?'selected':''} ${s==='Hold'?'hold-btn':''}" onclick="selectStation('${s}')">
+            <span class="s-icon">${STATION_ICONS[s]}</span>${s}
+          </button>`).join('')}
+      </div>
+
+      <hr class="divider">
+      <span class="panel-label">2. Capture Nameplate Photo</span>
+
+      <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoCapture(event)" />
+
+      <div id="photo-preview-wrap">
+        <img id="photo-preview" />
+        <div id="ocr-status">Processing…</div>
+      </div>
+
+      <button class="btn btn-blue btn-full" style="margin-bottom:12px" onclick="document.getElementById('photo-input').click()">
+        📸 Take Photo of Nameplate
+      </button>
+
+      <hr class="divider">
+      <span class="panel-label">Or Enter FAB Number Manually</span>
+      <div class="manual-input-row" style="margin-bottom:0">
+        <input class="manual-input" id="manual-fab" placeholder="e.g. BZCC372553" autocomplete="off"
+          onkeydown="if(event.key==='Enter') submitManual()" maxlength="10" />
+        <button class="btn btn-ghost" onclick="submitManual()">→</button>
+      </div>
+    </div>
+
+    <!-- Confirm Panel: shown after photo OCR or manual entry -->
+    <div id="confirm-panel" style="display:none">
+      <div class="scan-panel" style="border-color: ${isHold ? 'var(--hold)' : 'var(--accent2)'}; margin-bottom:0">
+        <span class="panel-label">3. Confirm &amp; Add Unit</span>
+
+        <div class="cp-fab-row">
+          <div class="cp-fab-display" id="confirmed-fab">—</div>
+          <button class="btn btn-ghost btn-sm" onclick="clearConfirmPanel()">✕</button>
+        </div>
+
+        <span class="panel-label" style="margin-top:6px">Remarks <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional${isHold ? ' — enter hold reason' : ''})</span></span>
+        <textarea id="remarks-input" rows="2"
+          placeholder="${isHold ? 'e.g. Performance issue, Part fitment issue, Partial assembly…' : 'Enter any remarks…'}"></textarea>
+
+        <button class="btn btn-success btn-full" onclick="confirmAddUnit()">
+          ✓ Add to ${state.activeStation}
+        </button>
+      </div>
+    </div>
+
+    <div class="section-header" style="margin-top:16px">
+      <span class="section-title">${STATION_ICONS[state.activeStation]} ${state.activeStation} — ${units.length} unit${units.length!==1?'s':''}</span>
+    </div>
+
+    ${units.length === 0 ? `
+      <div class="empty">
+        <div class="e-icon">${STATION_ICONS[state.activeStation]}</div>
+        <p>No units at <strong>${state.activeStation}</strong> yet.</p>
+      </div>` : units.map(u => unitCard(u)).join('')}
+  `;
+}
+
+function renderStationTab(station) {
+  const units = stationUnits(station);
+  return `
+    <div class="section-header" style="margin-top:4px">
+      <span class="section-title">${STATION_ICONS[station]} ${station} — ${units.length} unit${units.length!==1?'s':''}</span>
+    </div>
+    ${units.length === 0 ? `
+      <div class="empty">
+        <div class="e-icon">${STATION_ICONS[station]}</div>
+        <p>No units at <strong>${station}</strong> yet.<br>Go to Scan tab to add units.</p>
+      </div>` : units.map(u => unitCard(u)).join('')}
+  `;
+}
+
+function renderAllTab() {
+  const total = allUnits().length;
+  if (total === 0) return `
+    <div class="empty">
+      <div class="e-icon">📋</div>
+      <p>No units scanned yet.<br>Go to Scan tab to get started.</p>
+    </div>`;
+
+  const summary = `
+    <div class="summary-strip">
+      <div class="sum-chip">
+        <div class="sc-val">${total}</div>
+        <div class="sc-label">Total</div>
+      </div>
+      ${STATIONS.map(s => `
+        <div class="sum-chip ${s==='Hold'?'hold-chip':''}">
+          <div class="sc-val">${stationUnits(s).length}</div>
+          <div class="sc-label">${s}</div>
+        </div>`).join('')}
+    </div>`;
+
+  const groups = STATIONS.map(s => {
+    const su = stationUnits(s);
+    if (!su.length) return '';
+    return `
+      <div class="station-group">
+        <div class="station-group-title ${s==='Hold'?'hold-group':''}">
+          ${STATION_ICONS[s]} ${s} <span>(${su.length} unit${su.length!==1?'s':''})</span>
+        </div>
+        ${su.map(u => unitCard(u)).join('')}
+      </div>`;
+  }).join('');
+
+  return summary + groups;
+}
+
+function unitCard(u) {
+  const isHold = u.station === 'Hold';
+  return `
+    <div class="unit-card">
+      <div class="unit-card-top">
+        <div class="u-icon ${isHold?'hold-icon':''}">${STATION_ICONS[u.station]}</div>
+        <div class="u-body">
+          <div class="unit-fab">${u.fab}</div>
+          <div class="unit-meta">🕐 ${u.date} &nbsp;${u.time}</div>
+          <div class="unit-badges">
+            <span class="badge ${isHold?'badge-hold':'badge-station'}">${STATION_ICONS[u.station]} ${u.station}</span>
+            <span class="badge ${u.entryMethod==='Manual'?'badge-manual':'badge-photo'}">${u.entryMethod==='Manual'?'✏️ Manual':'📸 Photo'}</span>
+          </div>
+        </div>
+        <button class="u-del" onclick="deleteUnit('${u.fab}')" title="Remove">×</button>
+      </div>
+      ${u.remarks ? `<div class="unit-remarks ${isHold?'hold-remark':''}">💬 ${u.remarks}</div>` : ''}
+    </div>`;
+}
+
+// ═══════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════
+function switchTab(id) {
+  state.activeTab = id;
+  if (STATIONS.includes(id)) state.activeStation = id;
+  render();
+}
+
+function selectStation(s) {
+  state.activeStation = s;
+  clearConfirmPanel();
+  render();
+}
+
+// ═══════════════════════════════════════════
+//  RESET
+// ═══════════════════════════════════════════
+function openResetModal()  { document.getElementById('reset-modal').classList.add('open'); }
+function closeResetModal() { document.getElementById('reset-modal').classList.remove('open'); }
+function confirmReset() {
+  state.units = {};
+  saveData();
+  closeResetModal();
+  showToast('All data cleared', 'warn');
+  render();
+}
+
+// ═══════════════════════════════════════════
+//  EXCEL EXPORT
+// ═══════════════════════════════════════════
+function generateExcel() {
+  const units = allUnits();
+  if (units.length === 0) return showToast('No units to export', 'error');
+
+  // Sheet 1: Full WIP data
+  const headers = ['FAB No', 'Station', 'Remarks', 'Entry Method', 'Date', 'Time'];
+  const rows = [headers];
+  STATIONS.forEach(s => {
+    stationUnits(s).forEach(u => {
+      rows.push([u.fab, u.station, u.remarks || '', u.entryMethod, u.date, u.time]);
+    });
+  });
+
+  const wb  = XLSX.utils.book_new();
+  const ws  = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch:14 }, { wch:22 }, { wch:30 }, { wch:14 }, { wch:14 }, { wch:12 }];
+
+  // Bold + colour header row
+  ['A1','B1','C1','D1','E1','F1'].forEach(ref => {
+    if (ws[ref]) ws[ref].s = {
+      font: { bold: true, color: { rgb: 'FFFFFF' } },
+      fill: { fgColor: { rgb: '1E3A5F' } },
+      alignment: { horizontal: 'center' }
+    };
+  });
+
+  XLSX.utils.book_append_sheet(wb, ws, 'WIP Data');
+
+  // Sheet 2: Summary
+  const sumRows = [['Station', 'Unit Count']];
+  STATIONS.forEach(s => sumRows.push([s, stationUnits(s).length]));
+  sumRows.push(['', '']);
+  sumRows.push(['TOTAL', units.length]);
+
+  // Manual vs Photo split
+  const manualCount = units.filter(u => u.entryMethod === 'Manual').length;
+  const photoCount  = units.filter(u => u.entryMethod === 'Photo/OCR').length;
+  sumRows.push(['', '']);
+  sumRows.push(['Entry Method', 'Count']);
+  sumRows.push(['Photo/OCR', photoCount]);
+  sumRows.push(['Manual',    manualCount]);
+
+  const ws2 = XLSX.utils.aoa_to_sheet(sumRows);
+  ws2['!cols'] = [{ wch:22 }, { wch:12 }];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
+
+  const dateStr = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `WIP_Report_${dateStr}.xlsx`);
+  showToast(`Exported ${units.length} units ✓`, 'success');
+}
+
+// ═══════════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════════
+let toastTimer;
+function showToast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = '', 2800);
+}
+
+// ═══════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════
+loadData();
+render();
+</script>
+</body>
+</html>
